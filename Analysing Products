@@ -1,0 +1,300 @@
+# Product monthly orders and monthly revenue_per_session 
+
+Select
+	YEAR(website_sessions.created_at) as yr,
+    Month(website_sessions.created_at) as mo,
+    COUNT(orders.order_id) as orders,
+	COUNT(orders.order_id) / COUNT( website_sessions.website_session_id) as conversion_rate,
+    SUM(orders.price_usd) / COUNT( website_sessions.website_session_id) as revenue_per_sessions,
+    COUNT(distinct CASE WHEN orders.primary_product_id = 1 THEN orders.order_id ELSE NULL END) as product_one_orders,
+    COUNT(distinct CASE WHEN orders.primary_product_id = 2 THEN orders.order_id ELSE NULL END) as product_two_orders
+    
+FROM website_sessions
+left Join
+orders
+on website_sessions.website_session_id = orders.website_session_id
+where website_sessions.created_at between "2012-04-01" and "2013-04-05"
+GROUP BY 1,2;
+
+# comparing products sessions to order conversion rate
+
+select distinct
+	website_pageviews.pageview_url,
+    COUNT(DISTINCT website_pageviews.website_session_id) as Sessions,
+    COUNT(DISTINCT orders.order_id) as Orders,
+    COUNT(DISTINCT orders.order_id) / COUNT(DISTINCT website_pageviews.website_session_id) as conversion_rate
+FROM website_pageviews
+LEFT JOIN
+orders on website_pageviews.website_session_id = orders.website_session_id
+where website_pageviews.created_at BETWEEN "2013-02-01" AND "2013-03-01"
+	AND website_pageviews.pageview_url IN ('/the-original-mr-fuzzy','/the-forever-love-bear')
+group by website_pageviews.pageview_url;
+
+
+
+# Comparing the traffic
+
+
+Select
+time_periode,
+COUNT(DISTINCT website_session_id) AS sessions,
+COUNT(DISTINCT CASE WHEN product_made_it = 1 THEN website_session_id ELSE NULL END) AS w_next_pg,
+    COUNT(DISTINCT CASE WHEN product_made_it = 1 THEN website_session_id ELSE NULL END)
+    / COUNT(DISTINCT website_session_id) AS pct_to_products,
+    COUNT(DISTINCT CASE WHEN mrfuzzy_made_it = 1 THEN website_session_id ELSE NULL END) AS to_mrfuzzy,
+    COUNT(DISTINCT CASE WHEN mrfuzzy_made_it = 1 THEN website_session_id ELSE NULL END) 
+    / COUNT(DISTINCT CASE WHEN product_made_it = 1 THEN website_session_id ELSE NULL END) AS pct_to_mrfuzzy,
+    COUNT(DISTINCT CASE WHEN lovebear_made_it = 1 THEN website_session_id ELSE NULL END) AS to_lovebear,
+    COUNT(DISTINCT CASE WHEN lovebear_made_it = 1 THEN website_session_id ELSE NULL END) 
+    / COUNT(DISTINCT CASE WHEN product_made_it = 1 THEN website_session_id ELSE NULL END) AS pct_to_lovebear
+    FROM (
+    SELECT
+	website_session_id,
+    time_periode,
+    MAX(products_page) AS product_made_it,
+    MAX(mrfuzzy_page) AS mrfuzzy_made_it,
+    MAX(lovebear_page) AS lovebear_made_it
+FROM (
+Select
+new_date.time_periode,
+website_sessions.website_session_id,
+new_date.pageview_url,
+new_date.created_at AS pageview_created_at,
+CASE WHEN pageview_url = '/products' THEN 1 ELSE 0 END AS products_page,
+CASE WHEN pageview_url = '/the-original-mr-fuzzy' THEN 1 ELSE 0 END AS mrfuzzy_page,
+CASE WHEN pageview_url = '/the-forever-love-bear' THEN 1 ELSE 0 END AS lovebear_page
+FROM website_sessions
+LEFT JOIN (select
+website_session_id,
+website_pageview_id,
+pageview_url,
+created_at,
+Case
+	When created_at < "2013-01-06" THEN 'A. Pre_Product_2'
+    When created_at > "2013-01-06" THEN 'A. Post_Product_2'
+    Else 'check logic'
+END as time_periode
+From website_pageviews) as new_date
+ON website_sessions.website_session_id = new_date.website_session_id
+WHERE website_sessions.created_at BETWEEN "2012-10-06" AND "2013-04-06"
+AND new_date.pageview_url 
+IN ('/lander-1', '/products','/the-original-mr-fuzzy','/the-forever-love-bear')
+order by website_sessions.website_session_id,
+new_date.created_at
+) AS pageview_level
+Group by website_session_id,time_periode) as pageview_level_2
+GROUP BY time_periode 
+order by time_periode desc;
+
+
+
+
+#Comparing conversion funnel
+
+
+Create Temporary table session_seeing_product_pages
+Select
+	website_session_id,
+    website_pageview_id,
+    pageview_url AS product_page_seen
+    
+FROM website_pageviews
+
+WHERE created_at < "2013-04-10"
+AND created_at > "2013-01-06"
+AND pageview_url IN ('/the-original-mr-fuzzy','/the-forever-love-bear');
+    
+CREATE TEMPORARY TABLE session_product_level_made_it_flags
+SELECT
+	website_session_id,
+    CASE 
+		WHEN product_page_seen = '/the-original-mr-fuzzy' THEN 'Mrfuzzy'
+        WHEN product_page_seen = '/the-forever-love-bear' THEN 'Lovebear'
+        ELSE 'uh oh... check Logic'
+	END AS product_seen,
+    MAX(cart_page) AS cart_made_it,
+    MAX(shipping_page) AS shipping_made_it,
+    MAX(billing_page) AS billing_made_it,
+    MAX(thankyou_page) AS thankyou_made_it
+FROM(
+Select
+	session_seeing_product_pages.website_session_id,
+    session_seeing_product_pages.product_page_seen,
+    CASE WHEN pageview_url = '/cart' THEN 1 ELSE 0 END AS cart_page,
+    CASE WHEN pageview_url = '/shipping' THEN 1 ELSE 0 END AS shipping_page,
+    CASE WHEN pageview_url = '/billing-2' THEN 1 ELSE 0 END AS billing_page,
+    CASE WHEN pageview_url = '/thank-you-for-your-order' THEN 1 ELSE 0 END AS thankyou_page
+FROM session_seeing_product_pages
+LEFT JOIN website_pageviews
+	ON website_pageviews.website_session_id = session_seeing_product_pages.website_session_id
+    AND website_pageviews.website_pageview_id > session_seeing_product_pages.website_pageview_id
+ORDER BY 
+	session_seeing_product_pages.website_session_id,
+    website_pageviews.created_at
+) as pageview_level
+GROUP BY 
+	website_session_id,
+    CASE 
+		WHEN product_page_seen = '/the-original-mr-fuzzy' THEN 'Mrfuzzy'
+        WHEN product_page_seen = '/the-forever-love-bear' THEN 'Lovebear'
+        ELSE 'uh oh... check Logic'
+        END ;
+        
+        
+SELECT
+	Product_seen,
+    COUNT(DISTINCT website_session_id) as Sessions,
+    COUNT(DISTINCT CASE WHEN cart_made_it = 1 THEN website_session_id ELSE NULL END) AS to_cart,
+    COUNT(DISTINCT CASE WHEN shipping_made_it = 1 THEN website_session_id ELSE NULL END) AS to_shipping,
+    COUNT(DISTINCT CASE WHEN billing_made_it = 1 THEN website_session_id ELSE NULL END) AS to_billing,
+    COUNT(DISTINCT CASE WHEN thankyou_made_it = 1 THEN website_session_id ELSE NULL END) AS to_thankyou
+FROM session_product_level_made_it_flags
+GROUP BY product_seen;    
+    
+DROP TABLE session_product_level_made_it_flags ;
+SELECT * FROM session_product_level_made_it_flags ;
+
+SELECT
+product_seen,
+COUNT(DISTINCT CASE WHEN cart_made_it = 1 THEN website_session_id ELSE NULL END) / COUNT(DISTINCT website_session_id)   AS product_page_click_rate,
+COUNT(DISTINCT CASE WHEN shipping_made_it = 1 THEN website_session_id ELSE NULL END) / COUNT(DISTINCT CASE WHEN cart_made_it = 1 THEN website_session_id ELSE NULL END) AS shipping_page_click_rate,
+COUNT(DISTINCT CASE WHEN billing_made_it = 1 THEN website_session_id ELSE NULL END) / COUNT(DISTINCT CASE WHEN shipping_made_it = 1 THEN website_session_id ELSE NULL END) AS billing_page_click_rate,
+COUNT(DISTINCT CASE WHEN thankyou_made_it = 1 THEN website_session_id ELSE NULL END) / COUNT(DISTINCT CASE WHEN billing_made_it = 1 THEN website_session_id ELSE NULL END) AS purchase_page_click_rate
+FROM session_product_level_made_it_flags
+GROUP BY product_seen;
+
+
+# Birthday bear lauch
+
+Create temporary table product_porfolio
+Select 
+website_pageviews.website_session_id,
+website_pageviews.website_pageview_id,
+CASE
+	WHEN website_pageviews.created_at < "2013-12-12" THEN "Pre_Birthday_Bear"
+    WHEN website_pageviews.created_at > "2013-12-12" THEN "Post_Birthday_Bear"
+    ELSE "Check Logic"
+    END AS time_period
+from website_pageviews
+WHERE website_pageviews.created_at > "2013-11-12"
+AND website_pageviews.created_at < "2014-01-12";
+
+Create temporary table product_portfolio_2
+Select
+product_porfolio.time_period,
+product_porfolio.website_session_id,
+pageview_url,
+CASE WHEN pageview_url = '/cart' THEN 1 ELSE 0 END AS cart_page,
+CASE WHEN pageview_url = '/shipping' THEN 1 ELSE 0 END AS shipping_page,
+CASE WHEN pageview_url = '/thank-you-for-your-order' THEN 1 ELSE 0 END AS thankyou_page
+FROM
+product_porfolio
+LEFT JOIN
+website_pageviews
+ON website_pageviews.website_session_id = product_porfolio.website_session_id;
+
+create temporary table product_porfolio_3
+select
+time_period,
+product_portfolio_2.website_session_id,
+cart_page,
+shipping_page,
+CASE WHEN order_id AND thankyou_page = 1 THEN 1 ELSE 0 END AS orders,
+CASE WHEN order_id AND thankyou_page THEN items_purchased ELSE 0 END AS order_amount,
+CASE WHEN order_id AND thankyou_page THEN price_usd ELSE 0 END AS order_revenue
+FROM
+product_portfolio_2
+LEFT JOIN
+orders
+ON product_portfolio_2.website_session_id = orders.website_session_id;
+
+
+Select
+time_period,
+COUNT(DISTINCT CASE WHEN orders_made_it = 1 THEN website_session_id ELSE NULL END) / COUNT(DISTINCT  website_session_id )conv_rate,
+AVG( CASE WHEN order_amount_made_it > 0 THEN order_amount_made_it ELSE NULL END  ) AS product_per_order,
+AVG( CASE WHEN order_revenue_made_it > 0 THEN order_revenue_made_it ELSE NULL END) AS aov,
+SUM(order_revenue_made_it) / COUNT(DISTINCT  website_session_id ) AS rev_per_session
+FROM
+(
+select
+time_period,
+website_session_id,
+MAX(cart_page) AS cart_made_it,
+MAX(shipping_page) AS shipping_made_it,
+MAX(orders) AS orders_made_it,
+MAX(order_amount) AS order_amount_made_it,
+MAX(order_revenue) AS order_revenue_made_it
+from
+product_porfolio_3
+group by time_period,
+website_session_id
+) AS page_view
+GROUP BY time_period
+ORDER BY time_period DESC;
+
+# Product Cross selling trends
+
+Select* from order_items;
+Select
+order_items.created_at,
+order_items.order_item_id AS orders,
+order_items.product_id AS item,
+CASE WHEN order_item_refund_id THEN 1 ELSE 0 END AS order_refund
+FROM order_items
+LEFT JOIN
+order_item_refunds
+ON order_items.order_item_id = order_item_refunds.order_item_id;
+
+
+
+
+Select
+YEAR(created_at) AS YR,
+MONTH(created_at) AS MO,
+COUNT(DISTINCT CASE WHEN product_id = 1 THEN order_item_id ELSE NULL END) AS P1_orders,
+SUM(CASE WHEN product_id = 1 THEN price_usd ELSE NULL END) AS P1_revenue,
+COUNT(DISTINCT CASE WHEN product_id = 2 THEN order_item_id ELSE NULL END) AS P2_orders,
+SUM(CASE WHEN product_id = 2 THEN price_usd ELSE NULL END) AS P2_revenue,
+COUNT(DISTINCT CASE WHEN product_id = 3 THEN order_item_id ELSE NULL END) AS P3_orders,
+SUM(CASE WHEN product_id = 3 THEN price_usd ELSE NULL END) AS P3_revenue,
+COUNT(DISTINCT CASE WHEN product_id = 4 THEN order_item_id ELSE NULL END) AS P4_orders,
+SUM(CASE WHEN product_id = 4 THEN price_usd ELSE NULL END) AS P4_revenue,
+COUNT(DISTINCT order_item_id) AS orders,
+SUM(price_usd) AS revenue
+
+FROM
+order_items
+WHERE created_at < "2015-01-01"
+GROUP BY 1,2 ;
+
+
+
+# Product refund evolutions 
+
+
+Select
+YEAR(created_at) AS YR,
+MONTH(created_at) AS MO,
+COUNT(DISTINCT CASE WHEN item = 1 THEN orders ELSE NULL END) AS P1_orders,
+COUNT(DISTINCT CASE WHEN order_refund = 1 AND item = 1 THEN orders ELSE NULL END) / COUNT(DISTINCT CASE WHEN item = 1 THEN orders ELSE NULL END) as P1_refund_rt,
+COUNT(DISTINCT CASE WHEN item = 2 THEN orders ELSE NULL END) AS P2_orders,
+COUNT(DISTINCT CASE WHEN order_refund = 1 AND item = 2 THEN orders ELSE NULL END) / COUNT(DISTINCT CASE WHEN item = 2 THEN orders ELSE NULL END)as P2_refund_rt,
+COUNT(DISTINCT CASE WHEN item = 3 THEN orders ELSE NULL END) AS P3_orders,
+COUNT(DISTINCT CASE WHEN order_refund = 1 AND item = 3 THEN orders ELSE NULL END) / COUNT(DISTINCT CASE WHEN item = 3 THEN orders ELSE NULL END) as P3_refund_rt,
+COUNT(DISTINCT CASE WHEN item = 4 THEN orders ELSE NULL END) AS P4_orders,
+COUNT(DISTINCT CASE WHEN order_refund = 1 AND item = 4 THEN orders ELSE NULL END) / COUNT(DISTINCT CASE WHEN item = 4 THEN orders ELSE NULL END) as P4_refund_rt
+FROM
+(
+Select
+order_items.created_at,
+order_items.order_item_id AS orders,
+order_items.product_id AS item,
+CASE WHEN order_item_refund_id THEN 1 ELSE 0 END AS order_refund
+FROM order_items
+LEFT JOIN
+order_item_refunds
+ON order_items.order_item_id = order_item_refunds.order_item_id
+) AS TABLE1
+WHERE created_at < "2014-10-15"
+GROUP BY 1,2 ;
