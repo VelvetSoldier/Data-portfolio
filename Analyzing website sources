@@ -62,7 +62,9 @@ Group by 1;
 SELECT 
     MIN(DATE(created_at)) AS Dates,
     COUNT(DISTINCT CASE WHEN device_type = "mobile" THEN website_session_id else null end) AS mob_sessions,
-	COUNT(DISTINCT CASE WHEN device_type = "desktop" THEN website_session_id else null end) AS dtop_sessions
+	COUNT(DISTINCT CASE WHEN device_type = "desktop" THEN website_session_id else null end) AS dtop_sessions,
+    COUNT(DISTINCT CASE WHEN device_type = "mobile" THEN website_session_id else null end)
+	 + COUNT(DISTINCT CASE WHEN device_type = "desktop" THEN website_session_id else null end) AS Total_sessions
 FROM
     website_sessions
 WHERE
