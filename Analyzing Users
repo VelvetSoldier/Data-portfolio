@@ -1,0 +1,136 @@
+# repeat sessions
+
+select * from website_sessions ;
+
+CREATE TEMPORARY TABLE sessions_w_repeats
+SELECT
+	new_sessions.user_id,
+    new_sessions.website_session_id AS new_session_id,
+    website_sessions.website_session_id AS repeat_session_id
+FROM
+(
+SELECT
+	user_id,
+    website_session_id
+FROM website_sessions
+WHERE created_at < '2014-11-01'
+AND created_at >= '2014-01-01'
+AND is_repeat_session = 0
+) AS new_sessions
+LEFT JOIN website_sessions
+ON  website_sessions.user_id = new_sessions.user_id
+AND website_sessions.is_repeat_session = 1
+AND website_sessions.website_session_id > new_sessions.website_session_id
+AND website_sessions.created_at < '2014-11-01'
+AND website_sessions.created_at >= '2014-01-01'
+;
+
+
+SELECT * FROM sessions_w_repeats; 
+Drop table sessions_w_repeats;
+
+
+SELECT 
+	repeat_sessions,
+    COUNT(DISTINCT user_id) AS users
+FROM
+(
+SELECT
+	user_id,
+    COUNT(DISTINCT new_session_id) AS new_sessions,
+    COUNT(DISTINCT repeat_session_id) AS repeat_sessions
+FROM
+sessions_w_repeats
+GROUP BY 1
+ORDER BY 3 DESC
+) AS user_level
+
+GROUP BY 1
+;
+
+
+# first to second session timediff
+
+with new_users as(
+    select user_id, website_session_id, created_at
+    from website_sessions
+    where created_at between '2014-01-01' and '2014-11-01' and is_repeat_session = 0),
+    
+    user_visit_time as(
+    select n.user_id, n.created_at as first_visit, min(s.created_at) as second_visit
+    from new_users n
+    inner join website_sessions s
+        on n.user_id = s.user_id 
+        and s.is_repeat_session = 1 
+        and s.created_at between '2014-01-01' and '2014-11-01'
+    group by 1,2)
+    
+select 
+    avg(datediff(second_visit,first_visit)) as avg_days_first_to_second, 
+    min(datediff(second_visit,first_visit)) as min_days_first_to_second, 
+    max(datediff(second_visit,first_visit)) as max_days_first_to_second
+from user_visit_time ;
+
+
+#channel of first vs return sessions
+
+with sessions AS (
+select
+website_session_id,
+utm_campaign,
+utm_source,
+http_referer,
+CASE WHEN is_repeat_session = 0 THEN 1 ELSE 0 END AS new_sessions,
+CASE WHEN is_repeat_session = 1 THEN 1 ELSE 0 END AS repeat_sessions 
+FROM
+website_sessions
+WHERE created_at between '2014-01-01' and '2014-11-05')
+
+select
+
+CASE
+WHEN utm_campaign = "nonbrand" THEN "paid_nonbrand"
+WHEN utm_campaign = "brand" THEN "paid_brand"
+WHEN utm_source = "socialbook" THEN "paid_social"
+WHEN utm_source is NULL AND http_referer IS NULL THEN "Direct_typing"
+WHEN utm_source is NULL AND http_referer IN( "https://www.gsearch.com", "https://ww.bsearch.com") THEN "Organic_search"
+ELSE "Other"
+END AS channel_group,
+SUM(new_sessions) AS new_sessions,
+SUM(repeat_sessions ) AS repeat_sessions
+FROM
+sessions
+GROUP BY 
+CASE
+WHEN utm_campaign = "nonbrand" THEN "paid_nonbrand"
+WHEN utm_campaign = "brand" THEN "paid_brand"
+WHEN utm_source = "socialbook" THEN "paid_social"
+WHEN utm_source is NULL AND http_referer IS NULL THEN "Direct_typing"
+WHEN utm_source is NULL AND http_referer IN( "https://www.gsearch.com", "https://ww.bsearch.com") THEN "Organic_search"
+ELSE "Other"
+END
+ORDER BY 1;
+
+# Revenue_per_session First vs repeat users
+
+with base as(
+SELECT
+is_repeat_session,
+website_sessions.website_session_id,
+order_id,
+price_usd
+
+from
+website_sessions
+LEFT JOIN
+orders on website_sessions.website_session_id = orders.website_session_id
+where website_sessions.created_at between '2014-01-01' and '2014-11-05'
+)
+select
+is_repeat_session,
+COUNT(DISTINCT website_session_id) as Sessions,
+COUNT(DISTINCT order_id) / COUNT(DISTINCT website_session_id) as conv_rate,
+SUM(price_usd) / COUNT(DISTINCT website_session_id) as rev_per_session
+FROM
+base
+GROUP BY 1;
