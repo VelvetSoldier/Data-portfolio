@@ -1,0 +1,83 @@
+AdjustedPrice = [AVGProductPrice] * (1+[Price Adjustment (%)  Value])
+
+AdjustedProfit = [AdjustedRevenue] - [TotalCost]
+
+AdjustedRevenue = SUMX('Sales Data','Sales Data'[OrderQuantity] * [AdjustedPrice])
+
+AVGProductPrice = average('Product Lookup'[ProductPrice])
+
+PriceOverallAVG = CALCULATE([AVGProductPrice],ALL('Product Lookup'))
+
+RevenueAVGCustomer = DIVIDE([TotalRevenue],[TotalCustomers])
+
+FullName(CustomerDetail) = IF(HASONEVALUE('Customer Lookup'[CustomerKey]),MAX('Customer Lookup'[Full Name]), "Multiple Customers")
+
+OrderTargetGap = [TotalOrder] - [OrderTarget]
+
+Orders% = DIVIDE([TotalOrder],[AllOrders])
+
+Return% = DIVIDE([TotalReturns],[AllReturns])
+
+ReturnRate = DIVIDE([QuantityReturned],[QuantitySold],"no sales")
+
+BikeReturnRate = CALCULATE([ReturnRate],'Product Categories Lookup'[CategoryName] = "Bikes")
+
+BikeReturns = CALCULATE([TotalReturns], 'Product Categories Lookup'[CategoryName] = "Bikes")
+
+BikeSales = CALCULATE([QuantitySold],'Product Categories Lookup'[CategoryName] = "Bikes")
+
+HighTicketOrders = CALCULATE([TotalOrder],FILTER('Product Lookup','Product Lookup'[ProductPrice] > [PriceOverallAVG]))
+
+ProfitTargetGap = [TotalProfit] - [ProfitTarget]
+
+RevenueTargetGap = [TotalRevenue] - [RevenueTarget]
+
+OrderPreviousMonth = CALCULATE([TotalOrder],DATEADD('Calendar Lookup'[Date],-1,MONTH))
+
+OrderTarget = [OrderPreviousMonth] * 1.1
+
+Profit90DaysRolling = CALCULATE([TotalProfit],DATESINPERIOD('Calendar Lookup'[Date],MAX('Calendar Lookup'[Date]),-90,DAY))
+
+ProfitPreviousMonth = CALCULATE([TotalProfit],DATEADD('Calendar Lookup'[Date],-1,MONTH))
+
+ProfitTarget = [ProfitPreviousMonth] * 1.1
+
+ReturnPreviousMonth = CALCULATE([TotalReturns],DATEADD('Calendar Lookup'[Date],-1,MONTH))
+
+Revenue10daysrolling = CALCULATE([TotalRevenue],DATESINPERIOD('Calendar Lookup'[Date],max('Calendar Lookup'[Date]),-10,DAY))
+
+RevenuePreviousMonth = CALCULATE([TotalRevenue],DATEADD('Calendar Lookup'[Date],-1,MONTH))
+
+RevenueTarget = [RevenuePreviousMonth] * 1.1
+
+WeekendOrders = CALCULATE([TotalOrder],'Calendar Lookup'[Weekend] = "Weekend")
+
+YTDRevenue = CALCULATE([TotalRevenue],DATESYTD('Calendar Lookup'[Date]))
+
+TotalOrders(CustomerDetail) = IF(HASONEVALUE('Customer Lookup'[CustomerKey]),[TotalOrder], " - ")
+
+TotalRevenue(CustomerDetail) = IF(HASONEVALUE('Customer Lookup'[CustomerKey]),[TotalRevenue], " - ")
+
+QuantityReturned = sum('Returns Data'[ReturnQuantity])
+
+QuantitySold = sum(
+     'Sales Data'[OrderQuantity]
+)
+
+BirthYear = YEAR('Customer Lookup'[BirthDate])
+
+CustomerName(DAX) = 'Customer Lookup'[Prefix] & " " & 'Customer Lookup'[FirstName] & " " & 'Customer Lookup'[LastName]
+
+CustomerPriority = if('Customer Lookup'[Has_a_Child(s)] = "Yes" && 'Customer Lookup'[AnnualIncome] >= 100000, "Priority", "Standard")
+
+EducationCategory = SWITCH('Customer Lookup'[EducationLevel],"High School" , "High School","Partial High School", "High School", "Bachelors","Undergrad", "Partial College", "Undergrad","Graduate")
+
+Has_a_Child(s) = if('Customer Lookup'[TotalChildren] = 0 , "No" , "Yes")
+
+Incomelevel = SWITCH(TRUE(),'Customer Lookup'[AnnualIncome] >= 150000,"Very High",'Customer Lookup'[AnnualIncome] >= 100000,"High",'Customer Lookup'[AnnualIncome] >= 50000, "Average", "Low")
+
+PricePoint = SWITCH(TRUE(),'Product Lookup'[ProductPrice] > 500, "High", 'Product Lookup'[ProductPrice] > 100, "Mid-Range","Low")
+
+SKUCategory = left('Product Lookup'[ProductSKU],search("-",'Product Lookup'[ProductSKU])-1) 
+
+Quantity type = If('Sales Data'[OrderQuantity] = 1, "Single Item" ,"Multiple Items")
