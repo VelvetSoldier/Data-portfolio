@@ -1,0 +1,187 @@
+use mavenfuzzyfactory;
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetQuarterlySessionOrderData ()
+
+BEGIN
+    SELECT
+        QUARTER(website_sessions.created_at) AS Quarters,
+        COUNT(DISTINCT(website_sessions.website_session_id)) AS SessionCount,
+        COUNT(DISTINCT(order_id)) AS OrderCount
+    FROM
+        website_sessions
+    LEFT JOIN
+        orders
+    ON website_sessions.website_session_id = orders.website_session_id
+    WHERE website_sessions.created_at < GETDATE()
+    GROUP BY YEAR(website_sessions.created_at), QUARTER(website_sessions.created_at);
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetQuarterlyMetrics ()
+
+BEGIN
+    SELECT
+        QUARTER(website_sessions.created_at) AS Quarters,
+        COUNT(DISTINCT(order_id)) / COUNT(DISTINCT(website_sessions.website_session_id)) AS conv_rate,
+        COUNT(DISTINCT(order_id)) / SUM(price_usd) AS Revenue_per_order,
+        COUNT(DISTINCT(website_sessions.website_session_id)) / SUM(price_usd) AS Revenue_per_session
+    FROM
+        website_sessions
+    LEFT JOIN
+        orders
+    ON website_sessions.website_session_id = orders.website_session_id
+    WHERE website_sessions.created_at < "2015-01-01"
+    GROUP BY YEAR(website_sessions.created_at), QUARTER(website_sessions.created_at);
+END $$
+
+DELIMITER ;
+
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetQuarterlySourceMetrics ()
+
+BEGIN
+    SELECT
+        QUARTER(website_sessions.created_at) AS Quarters,
+        COUNT(DISTINCT CASE WHEN utm_campaign = "nonbrand" AND utm_source = "gsearch" THEN website_sessions.website_session_id ELSE NULL END) AS brand_gsearch,
+        COUNT(DISTINCT CASE WHEN utm_campaign = "nonbrand" AND utm_source = "bsearch" THEN website_sessions.website_session_id ELSE NULL END) AS brand_bsearch,
+        COUNT(DISTINCT CASE WHEN utm_campaign = "brand" THEN website_sessions.website_session_id ELSE NULL END) AS brand, 
+        COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NULL THEN website_sessions.website_session_id ELSE NULL END) AS Direct_typing,
+        COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IN ("https://www.gsearch.com", "https://ww.bsearch.com") THEN website_sessions.website_session_id ELSE NULL END) AS Organic_search
+    FROM
+        orders
+    LEFT JOIN
+        website_sessions ON orders.website_session_id = website_sessions.website_session_id
+    WHERE website_sessions.created_at < "2015-01-01"
+    GROUP BY YEAR(website_sessions.created_at), QUARTER(website_sessions.created_at);
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetQuarterlyConversionRates ()
+
+BEGIN
+    SELECT
+        QUARTER(website_sessions.created_at) AS Quarters,
+        COUNT(DISTINCT CASE WHEN utm_campaign = "nonbrand" AND utm_source = "gsearch" THEN order_id ELSE NULL END) 
+        / COUNT(DISTINCT CASE WHEN utm_campaign = "nonbrand" AND utm_source = "gsearch" THEN website_sessions.website_session_id ELSE NULL END) AS brand_gsearch_conv_rate,
+        COUNT(DISTINCT CASE WHEN utm_campaign = "nonbrand" AND utm_source = "bsearch" THEN order_id ELSE NULL END) 
+        / COUNT(DISTINCT CASE WHEN utm_campaign = "nonbrand" AND utm_source = "bsearch" THEN website_sessions.website_session_id ELSE NULL END) AS brand_bsearch_conv_rate,
+        COUNT(DISTINCT CASE WHEN utm_campaign = "brand" THEN order_id ELSE NULL END) 
+        / COUNT(DISTINCT CASE WHEN utm_campaign = "brand" THEN website_sessions.website_session_id ELSE NULL END) AS brand_conv_rate, 
+        COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NULL THEN order_id ELSE NULL END) 
+        / COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NULL THEN website_sessions.website_session_id ELSE NULL END) AS Direct_typing_conv_rate,
+        COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IN ("https://www.gsearch.com", "https://ww.bsearch.com") THEN order_id ELSE NULL END) 
+        / COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IN ("https://www.gsearch.com", "https://ww.bsearch.com") THEN website_sessions.website_session_id ELSE NULL END) AS Organic_search_conv_rate
+    FROM
+        website_sessions
+    LEFT JOIN
+        orders ON website_sessions.website_session_id = orders.website_session_id
+    WHERE website_sessions.created_at < "2015-01-01"
+    GROUP BY YEAR(website_sessions.created_at), QUARTER(website_sessions.created_at);
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetMonthlyProductMetrics ()
+
+BEGIN
+    SELECT
+        YEAR(created_at) AS YR,
+        MONTH(created_at) AS MO,
+        COUNT(DISTINCT CASE WHEN product_id = 1 THEN order_item_id ELSE NULL END) AS P1_orders,
+        SUM(CASE WHEN product_id = 1 THEN price_usd ELSE NULL END) AS P1_revenue,
+        COUNT(DISTINCT CASE WHEN product_id = 2 THEN order_item_id ELSE NULL END) AS P2_orders,
+        SUM(CASE WHEN product_id = 2 THEN price_usd ELSE NULL END) AS P2_revenue,
+        COUNT(DISTINCT CASE WHEN product_id = 3 THEN order_item_id ELSE NULL END) AS P3_orders,
+        SUM(CASE WHEN product_id = 3 THEN price_usd ELSE NULL END) AS P3_revenue,
+        COUNT(DISTINCT CASE WHEN product_id = 4 THEN order_item_id ELSE NULL END) AS P4_orders,
+        SUM(CASE WHEN product_id = 4 THEN price_usd ELSE NULL END) AS P4_revenue,
+        COUNT(DISTINCT order_item_id) AS orders,
+        SUM(price_usd) AS revenue
+    FROM
+        order_items
+    WHERE created_at < "2015-01-01"
+    GROUP BY YEAR(created_at), MONTH(created_at);
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetProductPageViewMetrics ()
+
+BEGIN
+    -- Create a temporary table for product pageviews
+    CREATE TEMPORARY TABLE products_pageviews AS
+    SELECT
+        website_session_id,
+        website_pageview_id,
+        created_at AS saw_product_page_at
+    FROM website_pageviews
+    WHERE pageview_url = '/products';
+
+    -- Select metrics based on the temporary table
+    SELECT
+        YEAR(saw_product_page_at) AS yr,
+        MONTH(saw_product_page_at) AS mo,
+        COUNT(DISTINCT products_pageviews.website_session_id) AS sessions_to_product_page,
+        COUNT(DISTINCT website_pageviews.website_session_id) AS click_to_next_page,
+        COUNT(DISTINCT website_pageviews.website_session_id) / COUNT(DISTINCT products_pageviews.website_session_id) AS clickthrough_rt,
+        COUNT(DISTINCT orders.order_id) AS orders,
+        COUNT(DISTINCT orders.order_id) / COUNT(DISTINCT products_pageviews.website_session_id) AS products_to_order_rt
+    FROM products_pageviews
+    LEFT JOIN website_pageviews
+        ON website_pageviews.website_session_id = products_pageviews.website_session_id
+        AND website_pageviews.website_pageview_id > products_pageviews.website_pageview_id
+    LEFT JOIN orders
+        ON orders.website_session_id = products_pageviews.website_session_id
+    GROUP BY YEAR(saw_product_page_at), MONTH(saw_product_page_at);
+
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE usp_GetCrossSellMetrics ()
+
+BEGIN
+    SELECT 
+        orders.primary_product_id,
+        COUNT(DISTINCT orders.order_id) AS orders,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 1 THEN orders.order_id ELSE NULL END) AS x_sell_prod1,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 2 THEN orders.order_id ELSE NULL END) AS x_sell_prod2,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 3 THEN orders.order_id ELSE NULL END) AS x_sell_prod3,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 4 THEN orders.order_id ELSE NULL END) AS x_sell_prod4,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 1 THEN orders.order_id ELSE NULL END) / COUNT(DISTINCT orders.order_id) AS x_sell_prod1_rt,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 2 THEN orders.order_id ELSE NULL END) / COUNT(DISTINCT orders.order_id) AS x_sell_prod2_rt,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 3 THEN orders.order_id ELSE NULL END) / COUNT(DISTINCT orders.order_id) AS x_sell_prod3_rt,
+        COUNT(DISTINCT CASE WHEN order_items.product_id = 4 THEN orders.order_id ELSE NULL END) / COUNT(DISTINCT orders.order_id) AS x_sell_prod4_rt
+    FROM orders
+    LEFT JOIN order_items
+        ON order_items.order_id = orders.order_id
+        AND order_items.is_primary_item = 0
+    WHERE orders.created_at >= "2014-12-05"
+    GROUP BY orders.primary_product_id;
+    
+END $$
+
+DELIMITER ;
