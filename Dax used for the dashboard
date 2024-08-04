@@ -1,0 +1,23 @@
+# making powerbi recognise dates
+
+Date = 
+DATE(
+    'Quarterly session to order evolution'[Years], 
+    SWITCH('Quarterly session to order evolution'[Quarters],
+        1, 3,  
+        2, 6,  
+        3, 9,  
+        4, 12  
+    ),
+    31  
+)
+
+# combining quarters and years
+
+Years and Quarters = "Q" & 'Quarterly session to order evolution'[Quarters] & " " & 'Quarterly session to order evolution'[Years]
+
+
+# previousmonth----
+
+OrderPreviousMonth = CALCULATE([Total orders],DATEADD('Products catalogue evolution'[Date],-1,MONTH))
+
