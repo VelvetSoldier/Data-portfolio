@@ -1,0 +1,131 @@
+
+
+# Duplicating the company name
+
+Sub DuplicateCompanies()
+    Dim SourceSheet As Worksheet
+    Dim SourceRange As Range
+    Dim TargetSheet As Worksheet
+    Dim TargetCell As Range
+    Dim Cell As Range
+    Dim i As Integer
+
+    ' Set the source and target sheets
+    Set SourceSheet = ThisWorkbook.Sheets("Budget") 
+    Set TargetSheet = ThisWorkbook.Sheets("Transformed Budget") 
+
+    ' Set the source range (list of companies)
+    Set SourceRange = SourceSheet.Range("A2:A10") 
+    ' Set the target cell to start duplicating
+    Set TargetCell = TargetSheet.Range("B2") 
+
+    ' Loop through each cell in the source range
+    For Each Cell In SourceRange
+        ' Loop to duplicate the company name 12 times
+        For i = 1 To 12
+            TargetCell.Value = Cell.Value
+            Set TargetCell = TargetCell.Offset(1, 0) ' Move to the next cell down
+        Next i
+    Next Cell
+End Sub
+
+# Duplicate the months
+
+Sub DuplicateMonthsInPlace()
+    Dim SourceSheet As Worksheet
+    Dim SourceRange As Range
+    Dim Cell As Range
+    Dim i As Integer
+    Dim j As Integer
+    Dim LastRow As Long
+
+    ' Set the source sheet
+    Set SourceSheet = ThisWorkbook.Sheets("Transformed Budget") 
+    ' Find the last row of data in the column
+    LastRow = SourceSheet.Cells(SourceSheet.Rows.Count, 1).End(xlUp).Row
+
+    ' Set the source range (list of months)
+    Set SourceRange = SourceSheet.Range("C2:C" & LastRow) 
+    ' Loop through each cell in the source range
+    For i = LastRow To 1 Step -1
+        ' Loop to duplicate the month 26 times
+        For j = 1 To 25 ' Already one instance is there, so 25 more duplicates
+            SourceSheet.Cells(i + 1, 1).EntireRow.Insert
+            SourceSheet.Cells(i + 1, 1).Value = SourceSheet.Cells(i, 1).Value
+        Next j
+    Next i
+End Sub
+
+# duplicate the column and add the type of cost for each company
+
+Sub PopulateDebtAmounts()
+    Dim ws1 As Worksheet, ws2 As Worksheet
+    Dim lastRow1 As Long, lastRow2 As Long
+    Dim clientName As String, debtName As String
+    Dim i As Long, j As Long, k As Long
+    Dim debtAmount As Double
+   
+    ' Set the worksheets
+    Set ws1 = ThisWorkbook.Sheets("Pivot Budget") ' Table 1
+    Set ws2 = ThisWorkbook.Sheets("Transformed Budget") ' Table 2
+   
+    ' Find the last rows in Table 1 and Table 2
+    lastRow1 = ws1.Cells(ws1.Rows.Count, "A").End(xlUp).Row
+    lastRow2 = ws2.Cells(ws2.Rows.Count, "A").End(xlUp).Row
+   
+    ' Loop through each row in Table 2 (Sheet 2)
+    For i = 2 To lastRow2 ' Assuming data starts from row 2 in Table 2
+        ' Get the client name and debt name from Table 2
+        clientName = ws2.Cells(i, "A").Value ' Client name in Column A
+        debtName = ws2.Cells(i, "E").Value ' Debt name in Column E
+       
+        ' Find the corresponding debt amount in Table 1 (Sheet 1)
+        For j = 2 To lastRow1 Step 26 ' Assuming debt names repeat every 26 rows
+            If ws1.Cells(j, "A").Value = debtName Then ' Match debt name in Column A of Table 1
+                ' Loop through client columns in Table 1 to find the matching client
+                For k = 2 To ws1.Cells(1, ws1.Columns.Count).End(xlToLeft).Column
+                    If ws1.Cells(1, k).Value = clientName Then ' Match client name in header row of Table 1
+                        ' Populate Column F in Table 2 (Sheet 2) with the debt amount
+                        ws2.Cells(i, "F").Value = ws1.Cells(j + WorksheetFunction.RoundUp((i - 1) / 2, 0), k).Value
+                        Exit For ' Exit client loop once debt amount is found
+                    End If
+                Next k
+                Exit For ' Exit debt name loop once debt amount is found
+            End If
+        Next j
+    Next i
+   
+    MsgBox "Debt amounts populated successfully!", vbInformation
+End Sub
+
+# Fill the empty space
+
+Sub FillEmptySpacesInColumnC()
+    Dim ws As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim lastValue As String
+   
+    ' Set the worksheet
+    Set ws = ThisWorkbook.Sheets("Transformed Budget") ' Adjust sheet name as needed
+   
+    ' Find the last used row in Column C
+    lastRow = ws.Cells(ws.Rows.Count, "C").End(xlUp).Row
+   
+    ' Initialize lastValue to handle cases where the first cell is empty
+    lastValue = ""
+   
+    ' Loop through each row in Column C
+    For i = 2 To lastRow
+        If ws.Cells(i, "C").Value <> "" Then
+            ' Update lastValue with the current non-empty cell value
+            lastValue = ws.Cells(i, "C").Value
+        Else
+            ' Fill empty cell with the last encountered non-empty cell value
+            ws.Cells(i, "C").Value = lastValue
+        End If
+    Next i
+   
+    MsgBox "Empty spaces filled successfully!", vbInformation
+End Sub
+
