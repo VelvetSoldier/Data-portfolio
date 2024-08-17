@@ -1,0 +1,320 @@
+# Importing the necessary libraries
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+
+
+
+
+
+# Creating the dataset
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate 400 company names
+company_names = [f"Company_{i}" for i in range(1, 401)]
+
+# Create a DataFrame with company names
+df = pd.DataFrame({'Company': company_names})
+
+# Generate quantity sold data from 2020 to 2024
+years = ['2020', '2021', '2022', '2023', '2024']
+for year in years:
+    df[year] = np.nan  # Initialize with NaN
+
+# Simulate data with clients leaving and new clients arriving
+for i in range(len(df)):
+    # Determine if the company was active in 2020 (initially assume all are)
+    active_in_2020 = True
+    # Simulate data for each year
+    for year in years:
+        if year == '2020':
+            # All companies are active in 2020
+            df.at[i, year] = np.random.randint(50, 1000) if active_in_2020 else np.nan
+        else:
+            # Simulate clients leaving due to COVID-19 between 2020 and 2021
+            if year == '2021' and np.random.rand() < 0.2:
+                active_in_2020 = False
+            # Some new clients might arrive in later years
+            if year == '2022' and not active_in_2020 and np.random.rand() < 0.1:
+                active_in_2020 = True
+            # Generate quantity sold if the company is active
+            df.at[i, year] = np.random.randint(50, 1000) if active_in_2020 else np.nan
+
+# Randomly shuffle the DataFrame to mix the data
+df = df.sample(frac=1).reset_index(drop=True)
+
+# Display the first few rows of the DataFrame
+df
+
+
+
+
+
+
+
+
+# Creating the validation dataset
+
+import pandas as pd
+import numpy as np
+
+# Set random seed for reproducibility
+np.random.seed(24)  # Use a different seed for different data
+
+# Generate 400 company names
+company_names = [f"Company_{i}" for i in range(1, 401)]
+
+# Create a DataFrame with company names
+dp = pd.DataFrame({'Company': company_names})
+
+# Generate quantity sold data from 2020 to 2024
+years = ['2020', '2021', '2022', '2023', '2024']
+for year in years:
+    dp[year] = np.nan  # Initialize with NaN
+
+# Simulate data with clients leaving and new clients arriving
+for i in range(len(dp)):
+    # Determine if the company was active in 2020
+    active_in_2020 = True
+    # Simulate data for each year
+    for year in years:
+        if year == '2020':
+            # Companies are active in 2020
+            dp.at[i, year] = np.random.randint(50, 1000) if active_in_2020 else np.nan
+        else:
+            # Different pattern for clients leaving and arriving
+            if year == '2021' and np.random.rand() < 0.2:  # Increased chance of leaving
+                active_in_2020 = False
+            if year == '2022' and not active_in_2020 and np.random.rand() < 0.1:  # Slightly different chance of rejoining
+                active_in_2020 = True
+            # Generate quantity sold if the company is active
+            dp.at[i, year] = np.random.randint(50, 1000) if active_in_2020 else np.nan
+
+# Randomly shuffle the DataFrame to mix the data
+dp = dp.sample(frac=1).reset_index(drop=True)
+
+# Display the first few rows of the DataFrame
+dp
+
+
+
+
+
+# Preparing the data
+
+df.fillna(0, inplace=True)
+
+# Prepare input (2020-2023) and target (2024) data
+input_data =df[['2020', '2021', '2022', '2023']].values
+target_data = df[['2024']].values
+
+# Standardize the data
+scaler = StandardScaler()
+scaled_input = scaler.fit_transform(input_data)
+scaled_target = scaler.fit_transform(target_data)
+
+# Convert to PyTorch tensors
+input_tensor = torch.tensor(scaled_input, dtype=torch.float32)
+target_tensor = torch.tensor(scaled_target, dtype=torch.float32)
+
+dp.fillna(0, inplace=True)
+
+# Prepare input (2020-2023) and target (2024) data
+val_input_data = dp[['2020', '2021', '2022', '2023']].values
+val_target_data = dp[['2024']].values
+
+# Standardize the data
+val_scaled_input = scaler.fit_transform(val_input_data)
+val_scaled_target = scaler.fit_transform(val_target_data)
+
+# Convert to PyTorch tensors
+val_input_tensor = torch.tensor(val_scaled_input, dtype=torch.float32)
+val_target_tensor = torch.tensor(val_scaled_target, dtype=torch.float32)
+
+
+
+
+
+
+
+
+
+# Define the LSTM model
+
+
+
+class LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size):
+        super(LSTMModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+        
+    def forward(self, x):
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        out, _ = self.lstm(x, (h0, c0))
+        out = self.fc(out[:, -1, :])
+        return out
+
+
+
+# Instantiate the model
+
+
+
+input_size = 4  # 2020 to 2023
+hidden_size = 50
+num_layers = 2
+output_size = 1  # Predicting 2024
+model = LSTMModel(input_size, hidden_size, num_layers, output_size)
+# Loss and optimizer
+criterion = nn.MSELoss()
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+
+
+# Train the model
+
+
+
+
+
+
+num_epochs = 100
+for epoch in range(num_epochs):
+    model.train()
+    outputs = model(input_tensor.unsqueeze(1))  # Add sequence dimension
+    loss = criterion(outputs, target_tensor)
+    
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    
+    # Validation
+    model.eval()
+    with torch.no_grad():
+        val_outputs = model(val_input_tensor.unsqueeze(1))  # Add sequence dimension
+        val_loss = criterion(val_outputs, val_target_tensor)
+    
+    # Print losses
+    if (epoch + 1) % 10 == 0:
+        print(f'Epoch [{epoch + 1}/{num_epochs}], '
+              f'Train Loss: {loss.item():.4f}, '
+              f'Validation Loss: {val_loss.item():.4f}')
+
+
+
+
+# Measure accuracy
+
+
+
+
+
+model.eval()
+with torch.no_grad():
+    predictions = model(input_tensor.unsqueeze(1)).numpy().flatten()
+    target_np = target_tensor.numpy().flatten()
+
+    mse = mean_squared_error(target_np, predictions)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(target_np, predictions)
+    r2 = r2_score(target_np, predictions)
+
+    print(f'MSE: {mse:.4f}, RMSE: {rmse:.4f}, MAE: {mae:.4f}, R²: {r2:.4f}')
+
+
+
+
+
+Test without missing values
+
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate 200 company names
+company_names = [f"Company_{i}" for i in range(1, 201)]
+
+# Create a DataFrame with company names
+df = pd.DataFrame({'Company': company_names})
+
+# Generate quantity sold data from 2020 to 2024
+years = ['2020', '2021', '2022', '2023', '2024']
+
+# Define seasonality and trend
+base_quantity = 100  # Base quantity for seasonality
+growth_rate = 0.05  # Annual growth rate
+seasonality = [0.9, 1.1, 1.0, 0.8, 1.2]  # Seasonal factors for each year
+
+# Generate data with growth and seasonality patterns
+for i, year in enumerate(years):
+    # Define growth factor based on the year
+    growth_factor = (1 + growth_rate) ** (i)
+    
+    # Generate quantity sold for each year with seasonality and growth trend
+    quantities = np.random.normal(
+        loc=base_quantity * growth_factor * seasonality[i], 
+        scale=50,  # Standard deviation (random noise)
+        size=len(df)
+    )
+    
+    # Ensure no negative quantities
+    df[year] = np.clip(quantities, a_min=0, a_max=None)
+
+# Randomly shuffle the DataFrame to mix the data
+df = df.sample(frac=1).reset_index(drop=True)
+
+# Display the first few rows of the DataFrame
+df
+
+
+
+# Set random seed for reproducibility
+np.random.seed(24)
+
+# Generate 200 company names
+company_names = [f"Company_{i}" for i in range(1, 201)]
+
+# Create a DataFrame with company names
+dp = pd.DataFrame({'Company': company_names})
+
+# Generate quantity sold data from 2020 to 2024
+years = ['2020', '2021', '2022', '2023', '2024']
+
+# Define seasonality and trend
+base_quantity = 100  # Base quantity for seasonality
+growth_rate = 0.05  # Annual growth rate
+seasonality = [0.9, 1.1, 1.0, 0.8, 1.2]  # Seasonal factors for each year
+
+# Generate data with growth and seasonality patterns
+for i, year in enumerate(years):
+    # Define growth factor based on the year
+    growth_factor = (1 + growth_rate) ** (i)
+    
+    # Generate quantity sold for each year with seasonality and growth trend
+    quantities = np.random.normal(
+        loc=base_quantity * growth_factor * seasonality[i], 
+        scale=50,  # Standard deviation (random noise)
+        size=len(df)
+    )
+    
+    # Ensure no negative quantities
+    dp[year] = np.clip(quantities, a_min=0, a_max=None)
+
+# Randomly shuffle the DataFrame to mix the data
+dp = dp.sample(frac=1).reset_index(drop=True)
+
+# Display the first few rows of the DataFrame
+dp
